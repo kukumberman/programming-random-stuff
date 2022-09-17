@@ -1,0 +1,12 @@
+{
+  "name": "youtube-extra-button",
+  "description": "Creates extra button that allows to view YouTube videos using picture-in-picture mode",
+  "version": "1.0",
+  "manifest_version": 3,
+  "content_scripts": [
+    {
+      "matches": ["https://*.youtube.com/*"],
+      "js": ["content-script.js"]
+    }
+  ]
+}
