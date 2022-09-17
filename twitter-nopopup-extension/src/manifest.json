@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Lazy Twitter",
+  "description": "Browse Twitter without being registered",
+  "version": "1.0",
+  "content_scripts": [
+    {
+      "matches": ["https://twitter.com/*"],
+      "js": ["content-script.js"]
+    }
+  ]
+}
