@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Fandom adblocker",
+  "description": "Blocks annoying ads",
+  "version": "1.0",
+  "content_scripts": [
+    {
+      "matches": ["https://*.fandom.com/*"],
+      "js": ["content-script.js"]
+    }
+  ]
+}
