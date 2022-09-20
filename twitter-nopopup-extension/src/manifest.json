@@ -8,5 +8,8 @@
       "matches": ["https://twitter.com/*"],
       "js": ["content-script.js"]
     }
+  ],
+  "permissions": [
+    "storage"
   ]
 }
