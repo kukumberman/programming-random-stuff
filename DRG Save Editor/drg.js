@@ -6,8 +6,9 @@ class DRG {
     const season_guids = [
       "A47D407EC0E4364892CE2E03DE7DF0B3",
       "B860B55F1D1BB54D8EE2E41FDA9F5838",
+      "D8810F6C76D374419AE6A18EF5B3BA26",
     ]
-    const currentSeasonIndex = 1
+    const currentSeasonIndex = 2
     this.season_guid = season_guids[currentSeasonIndex]
     this.season_xp_offset = 48
     this.scrip_offset = 88
