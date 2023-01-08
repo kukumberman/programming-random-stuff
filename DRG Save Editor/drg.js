@@ -70,6 +70,13 @@ function calculateNextXp(currentXp) {
   return currentXp + amountToAdd
 }
 
+function calculateNextXpLazy(currentXp) {
+  const XP_PER_LEVEL = 5000
+  const skipLevelCount = 10
+  const amountToAdd = XP_PER_LEVEL * skipLevelCount
+  return currentXp + amountToAdd
+}
+
 function main() {
   if (!fs.existsSync(SAVE_PATH)) {
     throw new Error("Save file doesn't exist, provide valid path")
