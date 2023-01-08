@@ -63,8 +63,12 @@ class DRG {
 
 const SAVE_PATH = "D:/Steam/steamapps/common/Deep Rock Galactic/FSD/Saved/SaveGames/<STEAM_ID>_Player.sav"
 
-const XP_PER_LEVEL = 5000
-const XP_THRESHOLD = 146
+function calculateNextXp(currentXp) {
+  const XP_PER_LEVEL = 5000
+  const XP_THRESHOLD = 146
+  const amountToAdd = XP_PER_LEVEL - XP_THRESHOLD - (currentXp % XP_PER_LEVEL)
+  return currentXp + amountToAdd
+}
 
 function main() {
   if (!fs.existsSync(SAVE_PATH)) {
@@ -79,7 +83,7 @@ function main() {
   console.log(season_data)
 
   const { xp, scrip } = season_data
-  const next_xp = xp + XP_PER_LEVEL - XP_THRESHOLD - (xp % XP_PER_LEVEL)
+  const next_xp = calculateNextXp(xp)
   const next_scrip = scrip + 1
   
   drg.write_season_data(next_xp, next_scrip)
