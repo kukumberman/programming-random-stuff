@@ -160,35 +160,6 @@ class WadRuntime {
   }
 }
 
-class MapData {
-  constructor(wadRuntime) {
-    this.vertexes = wadRuntime.vertexes
-    this.bounds = this.getBounds()
-    this.linedefs = wadRuntime.linedefs
-    this.things = wadRuntime.things
-  }
-
-  getBounds() {
-    const lastIndex = this.vertexes.length - 1
-    const buffer = [...this.vertexes]
-
-    buffer.sort((lhs, rhs) => lhs.x - rhs.x)
-    const xMin = buffer[0].x
-    const xMax = buffer[lastIndex].x
-
-    buffer.sort((lhs, rhs) => lhs.y - rhs.y)
-    const yMin = buffer[0].y
-    const yMax = buffer[lastIndex].y
-
-    return {
-      xMin,
-      xMax,
-      yMin,
-      yMax,
-    }
-  }
-}
-
 class Renderer {
   /**
    *
@@ -222,27 +193,48 @@ class Renderer {
 }
 
 class MapTopDownRenderer {
-  constructor(renderer, mapData, width, height) {
+  constructor(renderer, wadRuntime, width, height) {
     this.renderer = renderer
-    this.mapData = mapData
+    this.wad = wadRuntime
     this.width = width
     this.height = height
     this.padding = 25
     this.playerColors = ["red", "green", "blue", "yellow"]
+    this.bounds = this.getBounds()
+  }
+
+  getBounds() {
+    const lastIndex = this.wad.vertexes.length - 1
+    const buffer = [...this.wad.vertexes]
+
+    buffer.sort((lhs, rhs) => lhs.x - rhs.x)
+    const xMin = buffer[0].x
+    const xMax = buffer[lastIndex].x
+
+    buffer.sort((lhs, rhs) => lhs.y - rhs.y)
+    const yMin = buffer[0].y
+    const yMax = buffer[lastIndex].y
+
+    return {
+      xMin,
+      xMax,
+      yMin,
+      yMax,
+    }
   }
 
   drawLines() {
-    for (let i = 0, length = this.mapData.linedefs.length; i < length; i++) {
-      const line = this.mapData.linedefs[i]
-      const p1 = this.remapVertex(this.mapData.vertexes[line.startVertex])
-      const p2 = this.remapVertex(this.mapData.vertexes[line.endVertex])
+    for (let i = 0, length = this.wad.linedefs.length; i < length; i++) {
+      const line = this.wad.linedefs[i]
+      const p1 = this.remapVertex(this.wad.vertexes[line.startVertex])
+      const p2 = this.remapVertex(this.wad.vertexes[line.endVertex])
       this.renderer.line(p1.x, p1.y, p2.x, p2.y, "orange")
     }
   }
 
   drawVertexes() {
-    for (let i = 0, length = this.mapData.vertexes.length; i < length; i++) {
-      const vertex = this.mapData.vertexes[i]
+    for (let i = 0, length = this.wad.vertexes.length; i < length; i++) {
+      const vertex = this.wad.vertexes[i]
       const point = this.remapVertex(vertex)
       this.renderer.circle(point.x, point.y, 2, "white")
     }
@@ -260,7 +252,7 @@ class MapTopDownRenderer {
 
   drawPlayer(index) {
     const color = this.playerColors[index]
-    const thing = this.mapData.things[index]
+    const thing = this.wad.things[index]
     const point = this.remapVertex(thing)
     this.renderer.circle(point.x, point.y, 2, color)
   }
@@ -273,41 +265,73 @@ class MapTopDownRenderer {
   }
 
   remapX(value) {
-    const { xMin, xMax } = this.mapData.bounds
+    const { xMin, xMax } = this.bounds
     const out_min = this.padding
     const out_max = this.width - this.padding
     return Mathf.remap(value, xMin, xMax, out_min, out_max)
   }
 
   remapY(value) {
-    const { yMin, yMax } = this.mapData.bounds
+    const { yMin, yMax } = this.bounds
     const out_min = this.padding
     const out_max = this.height - this.padding
     return Mathf.remap(value, yMin, yMax, out_max, out_min)
   }
 }
 
+class App {
+  constructor(canvas) {
+    this.canvas = canvas
+  }
+
+  async preload() {
+    const response = await fetch("./wad/doom1.wad")
+    this.bytes = await response.arrayBuffer()
+  }
+
+  create() {
+    const wad = new WadData(this.bytes)
+    const wadRuntime = new WadRuntime("E1M1", wad)
+    this.renderer = new Renderer(this.canvas)
+    this.mapTopDownRenderer = new MapTopDownRenderer(
+      this.renderer,
+      wadRuntime,
+      this.canvas.width,
+      this.canvas.height
+    )
+  }
+
+  renderFrame() {
+    this.renderer.clear("black")
+    this.mapTopDownRenderer.drawLines()
+    this.mapTopDownRenderer.drawVertexes()
+    this.mapTopDownRenderer.drawDefaultPlayer()
+  }
+
+  renderLoop(time) {
+    this.renderFrame()
+    this.rafId = requestAnimationFrame(this.renderLoop.bind(this))
+  }
+
+  startRenderLoop() {
+    this.renderLoop(0)
+  }
+
+  stopRenderLoop() {
+    cancelAnimationFrame(this.rafId)
+  }
+}
+
 async function main() {
-  const response = await fetch("./wad/doom1.wad")
-  const bytes = await response.arrayBuffer()
-
-  const wad = new WadData(bytes)
-  const wadRuntime = new WadRuntime("E1M1", wad)
-  const mapData = new MapData(wadRuntime)
-
   const SCALE_FACTOR = 3
   const canvas = document.querySelector("canvas")
   canvas.width = DOOM_WIDTH * SCALE_FACTOR
   canvas.height = DOOM_HEIGHT * SCALE_FACTOR
+  const app = new App(canvas)
 
-  const renderer = new Renderer(canvas)
-  const mapTopDownRenderer = new MapTopDownRenderer(renderer, mapData, canvas.width, canvas.height)
-
-  renderer.clear("black")
-
-  mapTopDownRenderer.drawLines()
-  mapTopDownRenderer.drawVertexes()
-  mapTopDownRenderer.drawDefaultPlayer()
+  await app.preload()
+  app.create()
+  app.startRenderLoop()
 }
 
 main()
