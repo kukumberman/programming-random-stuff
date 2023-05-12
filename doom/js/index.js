@@ -83,6 +83,16 @@ class WadReader {
     }
   }
 
+  readThing(offset) {
+    return {
+      x: this.readInt16(offset + 0),
+      y: this.readInt16(offset + 2),
+      angle: this.readInt16(offset + 4),
+      type: this.readInt16(offset + 6),
+      flags: this.readInt16(offset + 8),
+    }
+  }
+
   readInt32(offset) {
     return this.dataView.getInt32(offset, true)
   }
@@ -142,6 +152,11 @@ class WadRuntime {
       (offset) => wad.reader.readLinedef(offset),
       14
     )
+    this.things = wad.getLumpData(
+      this.mapIndex + LUMP_INDICES.THINGS,
+      (offset) => wad.reader.readThing(offset),
+      10
+    )
   }
 }
 
@@ -150,6 +165,7 @@ class MapData {
     this.vertexes = wadRuntime.vertexes
     this.bounds = this.getBounds()
     this.linedefs = wadRuntime.linedefs
+    this.things = wadRuntime.things
   }
 
   getBounds() {
@@ -212,6 +228,7 @@ class MapTopDownRenderer {
     this.width = width
     this.height = height
     this.padding = 25
+    this.playerColors = ["red", "green", "blue", "yellow"]
   }
 
   drawLines() {
@@ -229,6 +246,23 @@ class MapTopDownRenderer {
       const point = this.remapVertex(vertex)
       this.renderer.circle(point.x, point.y, 2, "white")
     }
+  }
+
+  drawPlayers() {
+    for (let i = 0; i < 4; i++) {
+      this.drawPlayer(i)
+    }
+  }
+
+  drawDefaultPlayer() {
+    return this.drawPlayer(0)
+  }
+
+  drawPlayer(index) {
+    const color = this.playerColors[index]
+    const thing = this.mapData.things[index]
+    const point = this.remapVertex(thing)
+    this.renderer.circle(point.x, point.y, 2, color)
   }
 
   remapVertex(vertex) {
@@ -273,6 +307,7 @@ async function main() {
 
   mapTopDownRenderer.drawLines()
   mapTopDownRenderer.drawVertexes()
+  mapTopDownRenderer.drawDefaultPlayer()
 }
 
 main()
