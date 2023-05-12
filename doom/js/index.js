@@ -14,6 +14,142 @@ const LUMP_INDICES = {
 const DOOM_WIDTH = 320
 const DOOM_HEIGHT = 200
 
+class Transform {
+  constructor(ctx) {
+    this.ctx = ctx
+    this.s = 1
+    this.dx = 0
+    this.dy = 0
+  }
+
+  scale(s) {
+    this.ctx.scale(s, s)
+    this.s *= 1 / s
+    this.dx *= 1 / s
+    this.dy *= 1 / s
+  }
+
+  translate(dx, dy) {
+    this.ctx.translate(dx, dy)
+    this.dx -= dx
+    this.dy -= dy
+  }
+
+  transform({ x, y }) {
+    return {
+      x: this.s * x + this.dx,
+      y: this.s * y + this.dy,
+    }
+  }
+}
+
+class PanAndZoom {
+  constructor(canvas) {
+    this.canvas = canvas
+    this.ctx = this.canvas.getContext("2d")
+    this.transform = new Transform(this.ctx)
+
+    this.listeners = {
+      wheel: this.onWheel.bind(this),
+      mousedown: this.onMouseDown.bind(this),
+      mousemove: this.onMouseMove.bind(this),
+      mouseup: this.onMouseUp.bind(this),
+      contextmenu: (event) => event.preventDefault(),
+    }
+
+    this.config = {
+      incrementalScale: 0.2,
+    }
+
+    this.dirty = false
+  }
+
+  addEventListeners() {
+    this.canvas.addEventListener("wheel", this.listeners.wheel)
+    this.canvas.addEventListener("mousedown", this.listeners.mousedown)
+    this.canvas.addEventListener("mousemove", this.listeners.mousemove)
+    this.canvas.addEventListener("mouseup", this.listeners.mouseup)
+    this.canvas.addEventListener("contextmenu", this.listeners.contextmenu)
+  }
+
+  removeEventListeners() {
+    this.canvas.removeEventListener("wheel", this.listeners.wheel)
+    this.canvas.removeEventListener("mousedown", this.listeners.mousedown)
+    this.canvas.removeEventListener("mousemove", this.listeners.mousemove)
+    this.canvas.removeEventListener("mouseup", this.listeners.mouseup)
+    this.canvas.removeEventListener("contextmenu", this.listeners.contextmenu)
+  }
+
+  mouseOffset(event) {
+    return {
+      x: event.pageX - this.canvas.offsetLeft,
+      y: event.pageY - this.canvas.offsetTop,
+    }
+  }
+
+  onMouseDown(event) {
+    event.preventDefault()
+    event.stopPropagation()
+    this.dragStart = this.transform.transform(this.mouseOffset(event))
+    this.dragging = true
+  }
+
+  onMouseMove(event) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (!this.dragging) {
+      return
+    }
+
+    const offset = this.mouseOffset(event)
+    const dragEnd = this.transform.transform(offset)
+    const dx = dragEnd.x - this.dragStart.x
+    const dy = dragEnd.y - this.dragStart.y
+    this.transform.translate(dx, dy)
+    this.dirty = true
+    this.dragStart = this.transform.transform(offset)
+  }
+
+  onMouseUp(event) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    this.dragging = false
+  }
+
+  onWheel(event) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const offset = this.mouseOffset(event)
+    const t = this.transform.transform(offset)
+    this.transform.translate(t.x, t.y)
+    const factor =
+      Math.sign(event.deltaY) > 0
+        ? 1 - this.config.incrementalScale
+        : 1 + this.config.incrementalScale
+    this.transform.scale(factor)
+    this.transform.translate(-t.x, -t.y)
+    this.dirty = true
+  }
+
+  clearCanvas(color) {
+    const { x: left, y: top } = this.transform.transform({
+      x: 0,
+      y: 0,
+    })
+    const { x: right, y: bottom } = this.transform.transform({
+      x: this.ctx.canvas.width,
+      y: this.ctx.canvas.height,
+    })
+    const width = Math.abs(right - left)
+    const height = Math.abs(bottom - top)
+    this.ctx.fillStyle = color
+    this.ctx.fillRect(left, top, width, height)
+  }
+}
+
 class Mathf {
   static remap(value, x1, y1, x2, y2) {
     return ((value - x1) * (y2 - x2)) / (y1 - x1) + x2
@@ -193,14 +329,31 @@ class Renderer {
 }
 
 class MapTopDownRenderer {
-  constructor(renderer, wadRuntime, width, height) {
+  constructor(renderer, wadRuntime) {
     this.renderer = renderer
     this.wad = wadRuntime
-    this.width = width
-    this.height = height
+
     this.padding = 25
     this.playerColors = ["red", "green", "blue", "yellow"]
-    this.bounds = this.getBounds()
+    this.map = this.calculateMap()
+
+    const SCALE_FACTOR = 3
+    this.width = DOOM_WIDTH * SCALE_FACTOR
+    this.height = DOOM_HEIGHT * SCALE_FACTOR
+  }
+
+  calculateMap() {
+    const bounds = this.getBounds()
+    const width = bounds.xMax - bounds.xMin
+    const height = bounds.yMax - bounds.yMin
+    const aspect = width / height
+
+    return {
+      bounds,
+      width,
+      height,
+      aspect,
+    }
   }
 
   getBounds() {
@@ -265,16 +418,17 @@ class MapTopDownRenderer {
   }
 
   remapX(value) {
-    const { xMin, xMax } = this.bounds
+    const { xMin, xMax } = this.map.bounds
     const out_min = this.padding
     const out_max = this.width - this.padding
     return Mathf.remap(value, xMin, xMax, out_min, out_max)
   }
 
   remapY(value) {
-    const { yMin, yMax } = this.bounds
+    const { yMin, yMax } = this.map.bounds
     const out_min = this.padding
-    const out_max = this.height - this.padding
+    const height = this.width / this.map.aspect
+    const out_max = height - this.padding
     return Mathf.remap(value, yMin, yMax, out_max, out_min)
   }
 }
@@ -282,6 +436,13 @@ class MapTopDownRenderer {
 class App {
   constructor(canvas) {
     this.canvas = canvas
+    this.panAndZoom = new PanAndZoom(canvas)
+    this.panAndZoom.addEventListeners()
+  }
+
+  dispose() {
+    this.stopRenderLoop()
+    this.panAndZoom.removeEventListeners()
   }
 
   async preload() {
@@ -293,16 +454,17 @@ class App {
     const wad = new WadData(this.bytes)
     const wadRuntime = new WadRuntime("E1M1", wad)
     this.renderer = new Renderer(this.canvas)
-    this.mapTopDownRenderer = new MapTopDownRenderer(
-      this.renderer,
-      wadRuntime,
-      this.canvas.width,
-      this.canvas.height
-    )
+    this.mapTopDownRenderer = new MapTopDownRenderer(this.renderer, wadRuntime)
+  }
+
+  resize(width, height) {
+    this.canvas.width = width
+    this.canvas.height = height
   }
 
   renderFrame() {
     this.renderer.clear("black")
+    this.panAndZoom.clearCanvas("black")
     this.mapTopDownRenderer.drawLines()
     this.mapTopDownRenderer.drawVertexes()
     this.mapTopDownRenderer.drawDefaultPlayer()
@@ -323,11 +485,14 @@ class App {
 }
 
 async function main() {
-  const SCALE_FACTOR = 3
   const canvas = document.querySelector("canvas")
-  canvas.width = DOOM_WIDTH * SCALE_FACTOR
-  canvas.height = DOOM_HEIGHT * SCALE_FACTOR
+  canvas.width = window.innerWidth
+  canvas.height = window.innerHeight
   const app = new App(canvas)
+
+  window.addEventListener("resize", () => {
+    app.resize(window.innerWidth, window.innerHeight)
+  })
 
   await app.preload()
   app.create()
