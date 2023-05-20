@@ -199,11 +199,25 @@ class Mathf {
 }
 
 class WadReader {
+  /**
+   *
+   * @param {ArrayBuffer} arrayBuffer
+   */
   constructor(arrayBuffer) {
     this.textDecoder = new TextDecoder()
     this.dataView = new DataView(arrayBuffer)
     this.header = this.readHeader()
     this.directory = this.readDirectory()
+
+    //todo: use this functions
+    this.readFunctions = {
+      [LUMP_INDICES.VERTEXES]: this.readVertex.bind(this),
+      [LUMP_INDICES.LINEDEFS]: this.readLinedef.bind(this),
+      [LUMP_INDICES.THINGS]: this.readThing.bind(this),
+      [LUMP_INDICES.NODES]: this.readNode.bind(this),
+      [LUMP_INDICES.SSECTORS]: this.readSubsector.bind(this),
+      [LUMP_INDICES.SEGS]: this.readSegment.bind(this),
+    }
   }
 
   readHeader() {
@@ -228,6 +242,21 @@ class WadReader {
     }
 
     return directory
+  }
+
+  getLumpIndex(name) {
+    return this.directory.findIndex((entry) => entry.name === name)
+  }
+
+  getLumpData(index, readFunc, numBytes) {
+    const data = []
+    const entry = this.directory[index]
+    const length = entry.size / numBytes
+    for (let i = 0; i < length; i++) {
+      const offset = entry.filepos + i * numBytes
+      data.push(readFunc(offset))
+    }
+    return data
   }
 
   readVertex(offset) {
@@ -327,68 +356,6 @@ class WadReader {
   }
 }
 
-class WadData {
-  constructor(arrayBuffer) {
-    this.reader = new WadReader(arrayBuffer)
-  }
-
-  getLumpIndex(name) {
-    return this.reader.directory.findIndex((entry) => entry.name === name)
-  }
-
-  getLumpData(index, readFunc, numBytes) {
-    const data = []
-    const entry = this.reader.directory[index]
-    const length = entry.size / numBytes
-    for (let i = 0; i < length; i++) {
-      const offset = entry.filepos + i * numBytes
-      data.push(readFunc(offset))
-    }
-    return data
-  }
-}
-
-class WadRuntime {
-  constructor(name, wad) {
-    this.name = name
-    this.mapIndex = wad.getLumpIndex(name)
-    if (this.mapIndex === -1) {
-      throw new Error()
-    }
-    this.vertexes = wad.getLumpData(
-      this.mapIndex + LUMP_INDICES.VERTEXES,
-      (offset) => wad.reader.readVertex(offset),
-      4
-    )
-    this.linedefs = wad.getLumpData(
-      this.mapIndex + LUMP_INDICES.LINEDEFS,
-      (offset) => wad.reader.readLinedef(offset),
-      14
-    )
-    this.things = wad.getLumpData(
-      this.mapIndex + LUMP_INDICES.THINGS,
-      (offset) => wad.reader.readThing(offset),
-      10
-    )
-    this.nodes = wad.getLumpData(
-      this.mapIndex + LUMP_INDICES.NODES,
-      (offset) => wad.reader.readNode(offset),
-      28
-    )
-    this.rootNodeIndex = this.nodes.length - 1
-    this.subsectors = wad.getLumpData(
-      this.mapIndex + LUMP_INDICES.SSECTORS,
-      (offset) => wad.reader.readSubsector(offset),
-      4
-    )
-    this.segments = wad.getLumpData(
-      this.mapIndex + LUMP_INDICES.SEGS,
-      (offset) => wad.reader.readSegment(offset),
-      12
-    )
-  }
-}
-
 class Renderer {
   /**
    *
@@ -443,9 +410,14 @@ class Renderer {
 }
 
 class MapTopDownRenderer {
-  constructor(renderer, wadRuntime) {
+  /**
+   *
+   * @param {Renderer} renderer
+   * @param {MapData} mapData
+   */
+  constructor(renderer, mapData) {
     this.renderer = renderer
-    this.wad = wadRuntime
+    this.mapData = mapData
 
     this.padding = 25
     this.playerColors = ["red", "green", "blue", "yellow"]
@@ -471,8 +443,8 @@ class MapTopDownRenderer {
   }
 
   getBounds() {
-    const lastIndex = this.wad.vertexes.length - 1
-    const buffer = [...this.wad.vertexes]
+    const lastIndex = this.mapData.vertexes.length - 1
+    const buffer = [...this.mapData.vertexes]
 
     buffer.sort((lhs, rhs) => lhs.x - rhs.x)
     const xMin = buffer[0].x
@@ -507,38 +479,38 @@ class MapTopDownRenderer {
   }
 
   drawNode(index) {
-    const node = this.wad.nodes[index]
+    const node = this.mapData.nodes[index]
     this.drawBbox(node.rightBbox, "green")
     this.drawBbox(node.leftBbox, "red")
     this.drawSplitter(node.splitter)
   }
 
   drawSubsector(index, color) {
-    const sector = this.wad.subsectors[index]
+    const sector = this.mapData.subsectors[index]
     for (let i = 0, length = sector.segCount; i < length; i++) {
       this.drawSegment(sector.firstSegment + i, color)
     }
   }
 
   drawSegment(index, color) {
-    const segment = this.wad.segments[index]
-    const p1 = this.remapVertex(this.wad.vertexes[segment.startVertex])
-    const p2 = this.remapVertex(this.wad.vertexes[segment.endVertex])
+    const segment = this.mapData.segments[index]
+    const p1 = this.remapVertex(this.mapData.vertexes[segment.startVertex])
+    const p2 = this.remapVertex(this.mapData.vertexes[segment.endVertex])
     this.renderer.line(p1.x, p1.y, p2.x, p2.y, color)
   }
 
   drawLines() {
-    for (let i = 0, length = this.wad.linedefs.length; i < length; i++) {
-      const line = this.wad.linedefs[i]
-      const p1 = this.remapVertex(this.wad.vertexes[line.startVertex])
-      const p2 = this.remapVertex(this.wad.vertexes[line.endVertex])
+    for (let i = 0, length = this.mapData.linedefs.length; i < length; i++) {
+      const line = this.mapData.linedefs[i]
+      const p1 = this.remapVertex(this.mapData.vertexes[line.startVertex])
+      const p2 = this.remapVertex(this.mapData.vertexes[line.endVertex])
       this.renderer.line(p1.x, p1.y, p2.x, p2.y, "orange")
     }
   }
 
   drawVertexes() {
-    for (let i = 0, length = this.wad.vertexes.length; i < length; i++) {
-      const vertex = this.wad.vertexes[i]
+    for (let i = 0, length = this.mapData.vertexes.length; i < length; i++) {
+      const vertex = this.mapData.vertexes[i]
       const point = this.remapVertex(vertex)
       this.renderer.circle(point.x, point.y, 2, "white")
     }
@@ -556,7 +528,7 @@ class MapTopDownRenderer {
 
   drawPlayer(index) {
     const color = this.playerColors[index]
-    const thing = this.wad.things[index]
+    const thing = this.mapData.things[index]
     const point = this.remapVertex(thing)
     this.renderer.circle(point.x, point.y, 2, color)
   }
@@ -607,12 +579,70 @@ class MapTopDownRenderer {
     const out_max = height - this.padding
     return Mathf.remap(value, yMin, yMax, out_max, out_min)
   }
+
+  screenToWorldPoint(point) {
+    const { xMin, xMax, yMin, yMax } = this.map.bounds
+    return {
+      x: Mathf.remap(point.x, this.padding, this.width - this.padding, xMin, xMax),
+      y: Mathf.remap(
+        point.y,
+        this.padding,
+        this.width / this.map.aspect - this.padding,
+        yMax,
+        yMin
+      ),
+    }
+  }
 }
 
 class MapData {
-  constructor(wadRuntime) {
-    this.wad = wadRuntime
-    const thing = wadRuntime.things[0]
+  /**
+   *
+   * @param {WadReader} reader
+   * @param {string} name
+   */
+  constructor(reader, name) {
+    this.reader = reader
+    this.name = name
+
+    this.mapIndex = reader.getLumpIndex(name)
+    if (this.mapIndex === -1) {
+      throw new Error()
+    }
+
+    this.vertexes = reader.getLumpData(
+      this.mapIndex + LUMP_INDICES.VERTEXES,
+      (offset) => reader.readVertex(offset),
+      4
+    )
+    this.linedefs = reader.getLumpData(
+      this.mapIndex + LUMP_INDICES.LINEDEFS,
+      (offset) => reader.readLinedef(offset),
+      14
+    )
+    this.things = reader.getLumpData(
+      this.mapIndex + LUMP_INDICES.THINGS,
+      (offset) => reader.readThing(offset),
+      10
+    )
+    this.nodes = reader.getLumpData(
+      this.mapIndex + LUMP_INDICES.NODES,
+      (offset) => reader.readNode(offset),
+      28
+    )
+    this.rootNodeIndex = this.nodes.length - 1
+    this.subsectors = reader.getLumpData(
+      this.mapIndex + LUMP_INDICES.SSECTORS,
+      (offset) => reader.readSubsector(offset),
+      4
+    )
+    this.segments = reader.getLumpData(
+      this.mapIndex + LUMP_INDICES.SEGS,
+      (offset) => reader.readSegment(offset),
+      12
+    )
+
+    const thing = this.things[0]
     this.player = new Player(thing.x, thing.y, thing.angle, 90)
   }
 
@@ -624,10 +654,10 @@ class MapData {
 
   //! R_PointInSubsector
   pointInSubsector(x, y) {
-    let nodeIndex = this.wad.rootNodeIndex
+    let nodeIndex = this.rootNodeIndex
 
     while (!(nodeIndex & SUBSECTOR_IDENTIFIER)) {
-      const node = this.wad.nodes[nodeIndex]
+      const node = this.nodes[nodeIndex]
       nodeIndex = this.pointOnLeftSide(x, y, node) ? node.leftChild : node.rightChild
     }
 
@@ -636,6 +666,10 @@ class MapData {
 }
 
 class App {
+  /**
+   *
+   * @param {HTMLCanvasElement} canvas
+   */
   constructor(canvas) {
     this.canvas = canvas
     this.panAndZoom = new PanAndZoom(canvas)
@@ -649,15 +683,14 @@ class App {
 
   async preload() {
     const response = await fetch("./wad/doom1.wad")
-    this.bytes = await response.arrayBuffer()
+    const bytes = await response.arrayBuffer()
+    this.reader = new WadReader(bytes)
   }
 
   create() {
-    const wad = new WadData(this.bytes)
-    this.wadRuntime = new WadRuntime("E1M1", wad)
     this.renderer = new Renderer(this.canvas)
-    this.mapTopDownRenderer = new MapTopDownRenderer(this.renderer, this.wadRuntime)
-    this.mapData = new MapData(this.wadRuntime)
+    this.mapData = new MapData(this.reader, "E1M1")
+    this.mapTopDownRenderer = new MapTopDownRenderer(this.renderer, this.mapData)
   }
 
   resize(width, height) {
@@ -672,7 +705,7 @@ class App {
     this.mapTopDownRenderer.drawVertexes()
     this.mapTopDownRenderer.drawDefaultPlayer()
 
-    // for (let i = 0; i < this.wadRuntime.segments.length; i++) {
+    // for (let i = 0; i < this.mapData.segments.length; i++) {
     //   this.mapTopDownRenderer.drawSegment(i, "blue")
     // }
 
@@ -752,7 +785,9 @@ async function main() {
         x: event.clientX,
         y: event.clientY,
       })
-      //todo: calculate and set player position to follow cursor
+      const newPos = app.mapTopDownRenderer.screenToWorldPoint(pos)
+      player.x = newPos.x
+      player.y = newPos.y
     }
   })
 }
