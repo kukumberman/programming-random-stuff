@@ -1,0 +1,16 @@
+{
+  /* path to game directory */
+  "baseDirectory": "D:/path/to/game/directory",
+
+  /*
+  array of entries of game depot at steamdb, game files might be divided up to few depots, 
+  run "parser.js" code at "https://steamdb.info/depot/<id>/?show_hashes" and save to file
+  */
+  "steamdb": ["./data/depot.json"],
+
+  /* path to file where local files data (array of entries with name and hash) will be saved */
+  "local": "./data/local.json",
+
+  /* path to file where output data will be saved */
+  "output": "./data/output.json"
+}

@@ -1,0 +1,23 @@
+{
+  "name": "steamdb-verify",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "main": "node src/index",
+    "start": "npm run main -- --calculate --compare",
+    "start:config": "npm run start -- --config \"./config.json\"",
+    "calculate": "npm run main -- --calculate",
+    "compare": "npm run main -- --compare",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "glob": "^9.3.2",
+    "json5": "^2.2.3"
+  }
+}
