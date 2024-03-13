@@ -1,0 +1,14 @@
+{
+  "name": "ShaderToy Extended",
+  "description": "Allows to load custom textures and music by url",
+  "version": "1.0",
+  "manifest_version": 3,
+  "content_scripts": [
+    {
+      "matches": ["https://www.shadertoy.com/*"],
+      "js": ["index.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ]
+}
