@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Steam Market Context Menu Extension",
+  "version": "1.0",
+  "permissions": ["contextMenus", "activeTab", "scripting", "storage"],
+  "background": {
+    "service_worker": "./js/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://steamcommunity.com/market/*"],
+      "js": ["./js/content.js"]
+    }
+  ]
+}
