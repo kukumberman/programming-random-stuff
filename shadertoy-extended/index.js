@@ -1,4 +1,14 @@
 (function () {
+  function corsproxy(url) {
+    const prefix = "https://corsproxy.io/?";
+
+    if (!url.startsWith(prefix)) {
+      return prefix + encodeURIComponent(url);
+    }
+
+    return url;
+  }
+
   function getEntries() {
     const text = Array.from(document.querySelectorAll(".CodeMirror-code pre"))
       .map((el) => el.textContent)
@@ -7,13 +17,23 @@
     const regexPattern = /\/\/iChannel(\d+):([^:]+):(.+)/g;
     const matches = Array.from(text.matchAll(regexPattern));
 
-    return matches.map((match) => {
+    const entries = matches.map((match) => {
       return {
         channel: Number(match[1]),
         type: match[2],
         src: match[3],
       };
     });
+
+    const useCors = text.startsWith("//corsproxy");
+
+    if (useCors) {
+      entries.forEach((entry) => {
+        entry.src = corsproxy(entry.src);
+      });
+    }
+
+    return entries;
   }
 
   function onClick() {
