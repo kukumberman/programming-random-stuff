@@ -13,6 +13,18 @@ export class SlippyMap {
 
     this.dragging = false
 
+    this.markerContainer = document.createElement("div")
+    this.markerContainer.style.position = "absolute"
+    this.markerContainer.style.top = "0"
+    this.markerContainer.style.left = "0"
+    this.markerContainer.style.width = "100%"
+    this.markerContainer.style.height = "100%"
+    this.markerContainer.style.pointerEvents = "none"
+    this.markerContainer.style.overflow = "hidden"
+    canvas.parentNode.insertBefore(this.markerContainer, canvas.nextSibling)
+
+    this.markers = []
+
     this.resize()
 
     this.installEvents()
@@ -196,11 +208,31 @@ export class SlippyMap {
         this.ctx.drawImage(img, sx, sy, tileSize, tileSize)
       }
     }
+
+    for (const marker of this.markers) {
+      const pos = this.project(marker.lat, marker.lon, this.zoom)
+      const sx = pos.x - this.center.x + width / 2
+      const sy = pos.y - this.center.y + height / 2
+      if (marker.img.complete) {
+        marker.img.style.transform = `translate(${sx - marker.img.naturalWidth / 2}px, ${sy - marker.img.naturalHeight}px)`
+      }
+    }
   }
 
   renderLoop() {
     this.render()
     requestAnimationFrame(() => this.renderLoop())
+  }
+
+  addMarker(coords) {
+    const [lat, lon] = coords
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.src = "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png"
+    img.style.position = "absolute"
+    img.style.willChange = "transform"
+    this.markerContainer.appendChild(img)
+    this.markers.push({ lat, lon, img })
   }
 
   beginRenderLoop() {
