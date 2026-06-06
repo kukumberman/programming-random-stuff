@@ -24,10 +24,16 @@ export class SlippyMap {
     canvas.parentNode.insertBefore(this.markerContainer, canvas.nextSibling)
 
     this.markers = []
+    this.polylines = []
 
     this.resize()
 
     this.installEvents()
+  }
+
+  setView(coords, zoom) {
+    this.zoom = zoom
+    this.center = this.project(coords[0], coords[1], this.zoom)
   }
 
   resize() {
@@ -223,6 +229,27 @@ export class SlippyMap {
       }
     }
 
+    for (const poly of this.polylines) {
+      const pts = poly.coords.map(([lat, lon]) => {
+        const p = this.project(lat, lon, this.zoom)
+        return {
+          x: p.x - this.center.x + width / 2,
+          y: p.y - this.center.y + height / 2,
+        }
+      })
+      if (pts.length < 2) continue
+      this.ctx.beginPath()
+      this.ctx.moveTo(pts[0].x, pts[0].y)
+      for (let i = 1; i < pts.length; i++) {
+        this.ctx.lineTo(pts[i].x, pts[i].y)
+      }
+      this.ctx.strokeStyle = "#FF6200"
+      this.ctx.lineWidth = 4
+      this.ctx.lineJoin = "round"
+      this.ctx.lineCap = "round"
+      this.ctx.stroke()
+    }
+
     for (const marker of this.markers) {
       const pos = this.project(marker.lat, marker.lon, this.zoom)
       const sx = pos.x - this.center.x + width / 2
@@ -238,6 +265,16 @@ export class SlippyMap {
     requestAnimationFrame(() => this.renderLoop())
   }
 
+  addPolyline(coords) {
+    const poly = { coords }
+    poly.remove = () => {
+      const idx = this.polylines.indexOf(poly)
+      if (idx !== -1) this.polylines.splice(idx, 1)
+    }
+    this.polylines.push(poly)
+    return poly
+  }
+
   addMarker(coords) {
     const [lat, lon] = coords
     const img = new Image()
@@ -246,7 +283,14 @@ export class SlippyMap {
     img.style.position = "absolute"
     img.style.willChange = "transform"
     this.markerContainer.appendChild(img)
-    this.markers.push({ lat, lon, img })
+    const marker = { lat, lon, img }
+    marker.remove = () => {
+      img.remove()
+      const idx = this.markers.indexOf(marker)
+      if (idx !== -1) this.markers.splice(idx, 1)
+    }
+    this.markers.push(marker)
+    return marker
   }
 
   beginRenderLoop() {
