@@ -91,6 +91,20 @@ export class SlippyMap {
       this.clampCenter()
     })
 
+    this.canvas.addEventListener("click", (evt) => {
+      if (!evt.ctrlKey) return
+      const rect = this.canvas.getBoundingClientRect()
+      const mx = evt.clientX - rect.left
+      const my = evt.clientY - rect.top
+      const worldX = this.center.x + mx - this.canvas.width / 2
+      const worldY = this.center.y + my - this.canvas.height / 2
+      const { lat, lon } = this.unproject(worldX, worldY, this.zoom)
+      const url = `https://maps.google.com/?q=${lat},${lon}`
+      console.log([lat, lon])
+      console.log(url)
+      window.open(url, "_blank")
+    })
+
     this.canvas.addEventListener(
       "wheel",
       (e) => {
