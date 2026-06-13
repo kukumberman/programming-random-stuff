@@ -1,4 +1,11 @@
+export const EVENT_NAMES = Object.freeze({
+  MOVEEND: "moveend",
+})
+
 export class SlippyMap {
+  /**
+   * @param {HTMLCanvasElement} canvas
+   */
   constructor(canvas) {
     this.canvas = canvas
     this.ctx = canvas.getContext("2d")
@@ -12,6 +19,17 @@ export class SlippyMap {
     this.tiles = new Map()
 
     this.dragging = false
+    this.last = {
+      x: 0,
+      y: 0,
+    }
+
+    this.debug = true
+
+    this.tileFunc = (z, x, y) => {
+      console.log(`Requested tile at ${z}/${x}/${y}`)
+      return ""
+    }
 
     this.markerContainer = document.createElement("div")
     this.markerContainer.style.position = "absolute"
@@ -29,6 +47,8 @@ export class SlippyMap {
     this.resize()
 
     this.installEvents()
+
+    this.events = new EventTarget()
   }
 
   setView(coords, zoom) {
@@ -74,8 +94,8 @@ export class SlippyMap {
 
     this.canvas.addEventListener("mousedown", (e) => {
       this.dragging = true
-      this.lastX = e.clientX
-      this.lastY = e.clientY
+      this.last.x = e.clientX
+      this.last.y = e.clientY
     })
 
     window.addEventListener("mouseup", () => {
@@ -85,11 +105,11 @@ export class SlippyMap {
     window.addEventListener("mousemove", (e) => {
       if (!this.dragging) return
 
-      const dx = e.clientX - this.lastX
-      const dy = e.clientY - this.lastY
+      const dx = e.clientX - this.last.x
+      const dy = e.clientY - this.last.y
 
-      this.lastX = e.clientX
-      this.lastY = e.clientY
+      this.last.x = e.clientX
+      this.last.y = e.clientY
 
       this.center.x -= dx
       this.center.y -= dy
@@ -102,13 +122,11 @@ export class SlippyMap {
       const rect = this.canvas.getBoundingClientRect()
       const mx = evt.clientX - rect.left
       const my = evt.clientY - rect.top
-      const worldX = this.center.x + mx - this.canvas.width / 2
-      const worldY = this.center.y + my - this.canvas.height / 2
-      const { lat, lon } = this.unproject(worldX, worldY, this.zoom)
+      const { lat, lon } = this.pixelToLatLon(mx, my)
       const url = `https://maps.google.com/?q=${lat},${lon}`
       console.log([lat, lon])
       console.log(url)
-      window.open(url, "_blank")
+      // window.open(url, "_blank")
     })
 
     this.canvas.addEventListener(
@@ -151,6 +169,12 @@ export class SlippyMap {
     )
   }
 
+  pixelToLatLon(x, y) {
+    const worldX = this.center.x + x - this.canvas.width / 2
+    const worldY = this.center.y + y - this.canvas.height / 2
+    return this.unproject(worldX, worldY, this.zoom)
+  }
+
   tileKey(z, x, y) {
     return `${z}/${x}/${y}`
   }
@@ -163,8 +187,7 @@ export class SlippyMap {
     const img = new Image()
 
     img.crossOrigin = "anonymous"
-
-    img.src = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+    img.src = this.tileFunc(z, x, y)
 
     this.tiles.set(key, img)
 
@@ -185,6 +208,14 @@ export class SlippyMap {
     this.center.y = Math.max(minY, Math.min(maxY, this.center.y))
   }
 
+  getCenter() {
+    return this.pixelToLatLon(this.canvas.width * 0.5, this.canvas.height * 0.5)
+  }
+
+  getZoom() {
+    return this.zoom
+  }
+
   render() {
     const width = this.canvas.width
     const height = this.canvas.height
@@ -198,6 +229,7 @@ export class SlippyMap {
     const bottom = top + height
 
     const tileSize = this.tileSize
+    const tileHalfSize = tileSize / 2
 
     const tileX0 = Math.floor(left / tileSize)
     const tileY0 = Math.floor(top / tileSize)
@@ -220,12 +252,18 @@ export class SlippyMap {
 
         const img = this.getTile(this.zoom, wrappedX, ty)
 
-        if (!img.complete) continue
+        const notLoadedYet = !img.complete || img.naturalWidth === 0 || img.naturalHeight === 0
 
         const sx = tx * tileSize - left
         const sy = ty * tileSize - top
 
-        this.ctx.drawImage(img, sx, sy, tileSize, tileSize)
+        if (!notLoadedYet) {
+          this.ctx.drawImage(img, sx, sy, tileSize, tileSize)
+        }
+
+        if (this.debug) {
+          this.renderDebugTile(sx, sy, wrappedX, ty)
+        }
       }
     }
 
@@ -258,11 +296,8 @@ export class SlippyMap {
         marker.img.style.transform = `translate(${sx - marker.img.naturalWidth / 2}px, ${sy - marker.img.naturalHeight}px)`
       }
     }
-  }
 
-  renderLoop() {
-    this.render()
-    requestAnimationFrame(() => this.renderLoop())
+    this.events.dispatchEvent(new CustomEvent(EVENT_NAMES.MOVEEND))
   }
 
   addPolyline(coords) {
@@ -293,7 +328,37 @@ export class SlippyMap {
     return marker
   }
 
-  beginRenderLoop() {
-    requestAnimationFrame(() => this.renderLoop())
+  // https://docs.maptiler.com/google-maps-coordinates-tile-bounds-projection/
+  // https://labs.maptiler.com/showcase/tiles-map-demo/
+  renderDebugTile(sx, sy, tx, ty) {
+    const tileSize = this.tileSize
+    const tileHalfSize = tileSize / 2
+
+    const text = `Google: (${tx},${ty})\nZoom ${this.zoom}`
+    const flag = (tx + ty) % 2 === 0
+    const tileColor = flag ? "transparent" : "rgba(0, 0, 0, 0.34)"
+
+    this.ctx.save()
+
+    this.ctx.fillStyle = tileColor
+    this.ctx.fillRect(sx, sy, tileSize, tileSize)
+
+    this.ctx.shadowColor = "rgba(0, 0, 0, 0.2)"
+    this.ctx.shadowBlur = 2
+    this.ctx.shadowOffsetX = 2
+    this.ctx.shadowOffsetY = 2
+
+    this.ctx.font = "18px Arial"
+    this.ctx.textAlign = "center"
+    this.ctx.textBaseline = "middle"
+
+    this.ctx.lineWidth = 4
+    this.ctx.strokeStyle = "rgba(0, 0, 0, 0.69)"
+    this.ctx.strokeText(text, sx + tileHalfSize, sy + tileHalfSize)
+
+    this.ctx.fillStyle = "white"
+    this.ctx.fillText(text, sx + tileHalfSize, sy + tileHalfSize)
+
+    this.ctx.restore()
   }
 }
