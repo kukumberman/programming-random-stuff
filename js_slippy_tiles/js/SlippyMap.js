@@ -2,6 +2,27 @@ export const EVENT_NAMES = Object.freeze({
   MOVEEND: "moveend",
 })
 
+class MercatorProjection {
+  static EARTH_CIRCUMFERENCE = 40075016.686
+
+  constructor(tileSize) {
+    this.tileSize = tileSize
+  }
+
+  /**
+   * https://github.com/JakeWharton/Android-MapForgeFragment/blob/master/library-common/src/com/jakewharton/android/mapsforge_fragment/MercatorProjection.java
+   * @param {number} lat
+   * @param {number} zoom
+   * @returns
+   */
+  calculateGroundResolution(lat, zoom) {
+    return (
+      (Math.cos((lat * Math.PI) / 180) * MercatorProjection.EARTH_CIRCUMFERENCE) /
+      (this.tileSize * Math.pow(2, zoom))
+    )
+  }
+}
+
 export class SlippyMap {
   /**
    * @param {HTMLCanvasElement} canvas
@@ -11,6 +32,7 @@ export class SlippyMap {
     this.ctx = canvas.getContext("2d")
 
     this.tileSize = 256
+    this.projection = new MercatorProjection(this.tileSize)
 
     this.zoom = 10
 
@@ -43,6 +65,7 @@ export class SlippyMap {
 
     this.markers = []
     this.polylines = []
+    this.circles = []
 
     this.resize()
 
@@ -100,6 +123,8 @@ export class SlippyMap {
 
     window.addEventListener("mouseup", () => {
       this.dragging = false
+
+      this.events.dispatchEvent(new CustomEvent(EVENT_NAMES.MOVEEND))
     })
 
     window.addEventListener("mousemove", (e) => {
@@ -124,8 +149,10 @@ export class SlippyMap {
       const my = evt.clientY - rect.top
       const { lat, lon } = this.pixelToLatLon(mx, my)
       const url = `https://maps.google.com/?q=${lat},${lon}`
+      const osmUrl = `https://www.openstreetmap.org/#map=${this.getZoom()}/${lat}/${lon}`
       console.log([lat, lon])
       console.log(url)
+      console.log(osmUrl)
       // window.open(url, "_blank")
     })
 
@@ -297,7 +324,32 @@ export class SlippyMap {
       }
     }
 
-    this.events.dispatchEvent(new CustomEvent(EVENT_NAMES.MOVEEND))
+    this.renderCircles()
+  }
+
+  renderCircles() {
+    const width = this.canvas.width
+    const height = this.canvas.height
+
+    for (const circle of this.circles) {
+      const p = this.project(circle.lat, circle.lon, this.zoom)
+
+      const sx = p.x - this.center.x + width / 2
+      const sy = p.y - this.center.y + height / 2
+
+      const radiusPx =
+        circle.radiusMeters / this.projection.calculateGroundResolution(circle.lat, this.zoom)
+
+      this.ctx.beginPath()
+      this.ctx.arc(sx, sy, radiusPx, 0, Math.PI * 2)
+
+      this.ctx.fillStyle = "rgba(0, 128, 255, 0.2)"
+      this.ctx.fill()
+
+      this.ctx.strokeStyle = "#0080ff"
+      this.ctx.lineWidth = 2
+      this.ctx.stroke()
+    }
   }
 
   addPolyline(coords) {
@@ -326,6 +378,25 @@ export class SlippyMap {
     }
     this.markers.push(marker)
     return marker
+  }
+
+  addCircle(coords, radiusMeters) {
+    const [lat, lon] = coords
+
+    const circle = {
+      lat,
+      lon,
+      radiusMeters,
+    }
+
+    circle.remove = () => {
+      const idx = this.circles.indexOf(circle)
+      if (idx !== -1) this.circles.splice(idx, 1)
+    }
+
+    this.circles.push(circle)
+
+    return circle
   }
 
   // https://docs.maptiler.com/google-maps-coordinates-tile-bounds-projection/

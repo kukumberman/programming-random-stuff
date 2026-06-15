@@ -46,7 +46,21 @@ function renderLoop() {
   window.requestAnimationFrame(renderLoop)
 }
 
-function main() {
+async function main() {
+  const response = await fetch("./assets/route.json")
+  const data = await response.json()
+  const { from_point, to_point, intersection_from, intersection_to, points } = data
+  const polyline = points.map((entry) => [entry.y, entry.x])
+
+  map.addMarker([from_point.y, from_point.x])
+  map.addMarker([to_point.y, to_point.x])
+
+  const circleRadiusM = 1
+  map.addCircle([intersection_from.y, intersection_from.x], circleRadiusM)
+  map.addCircle([intersection_to.y, intersection_to.x], circleRadiusM)
+
+  map.addPolyline(polyline)
+
   window.addEventListener("hashchange", () => {
     updateMapLocationFromHash()
   })
