@@ -39,6 +39,7 @@ export class SlippyMap {
     this.center = this.project(51.509865, -0.118092, this.zoom)
 
     this.tiles = new Map()
+    this.crossOrigin = false
 
     this.dragging = false
     this.last = {
@@ -47,6 +48,7 @@ export class SlippyMap {
     }
 
     this.debug = true
+    this.stateChanged = false
 
     this.tileFunc = (z, x, y) => {
       console.log(`Requested tile at ${z}/${x}/${y}`)
@@ -124,7 +126,7 @@ export class SlippyMap {
     window.addEventListener("mouseup", () => {
       this.dragging = false
 
-      this.events.dispatchEvent(new CustomEvent(EVENT_NAMES.MOVEEND))
+      this.stateChanged = true
     })
 
     window.addEventListener("mousemove", (e) => {
@@ -191,6 +193,8 @@ export class SlippyMap {
         this.center.y = newWorldY - my + this.canvas.height / 2
 
         this.clampCenter()
+
+        this.stateChanged = true
       },
       { passive: false }
     )
@@ -213,7 +217,9 @@ export class SlippyMap {
 
     const img = new Image()
 
-    img.crossOrigin = "anonymous"
+    if (this.crossOrigin) {
+      img.crossOrigin = "anonymous"
+    }
     img.src = this.tileFunc(z, x, y)
 
     this.tiles.set(key, img)
@@ -325,6 +331,11 @@ export class SlippyMap {
     }
 
     this.renderCircles()
+
+    if (this.stateChanged) {
+      this.stateChanged = false
+      this.events.dispatchEvent(new CustomEvent(EVENT_NAMES.MOVEEND))
+    }
   }
 
   renderCircles() {
